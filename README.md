@@ -163,6 +163,9 @@ Verify services are healthy:
 - **FastAPI API**: [http://localhost:8000/docs](http://localhost:8000/docs)
 - **MinIO Console**: [http://localhost:9001](http://localhost:9001) (`admin` / `password123`)
 - **Trino Web UI**: [http://localhost:8080](http://localhost:8080)
+# Access UIs
+- **React UI**: [http://localhost:3001](http://localhost:3001)
+
 
 ### 2. Ingest Sample Datasets
 

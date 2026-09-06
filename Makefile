@@ -1,4 +1,4 @@
-.PHONY: help up down restart logs test test-cov ingest-sample trino-cli clean
+.PHONY: help docker-ready up down restart logs test test-cov ingest-sample trino-cli clean
 
 help:
 	@echo "Local Iceberg Ingestion Toolkit - Available Commands:"
@@ -12,13 +12,31 @@ help:
 	@echo "  make trino-cli      - Open interactive Trino CLI connected to Iceberg catalog"
 	@echo "  make clean          - Remove containers, volumes, and temporary files"
 
-up:
+docker-ready:
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		if ! docker info >/dev/null 2>&1; then \
+			echo "Docker is not running. Starting Docker Desktop..."; \
+			open -a Docker; \
+			echo "Waiting for Docker Desktop to start..."; \
+			until docker info >/dev/null 2>&1; do \
+				sleep 2; \
+			done; \
+			echo "Docker Desktop is ready."; \
+		fi; \
+	else \
+		if ! docker info >/dev/null 2>&1; then \
+			echo "ERROR: Docker daemon is not running."; \
+			exit 1; \
+		fi; \
+	fi
+
+up: docker-ready
 	docker compose up --build -d
 
 down:
 	docker compose down
 
-restart:
+restart: docker-ready
 	docker compose restart
 
 logs:
@@ -44,7 +62,7 @@ ingest-sample:
 		-H "Content-Type: application/json" \
 		-d '{"name": "products", "file": "products.csv"}' | python3 -m json.tool || true
 
-trino-cli:
+trino-cli: docker-ready
 	docker exec -it iceberg-trino trino --catalog iceberg --schema default
 
 clean:
