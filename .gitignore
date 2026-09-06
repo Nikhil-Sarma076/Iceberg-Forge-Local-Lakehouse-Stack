@@ -30,3 +30,6 @@ build/
 
 # Docker
 *.log
+
+# Local sample datasets
+sample-data/*.csv
