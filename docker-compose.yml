@@ -1,0 +1,156 @@
+services:
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:RELEASE.2024-03-03T17-50-39Z
+    container_name: iceberg-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9002:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # MinIO Bucket Auto-Provisioning
+  mc:
+    image: minio/mc:latest
+    container_name: iceberg-mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
+      /usr/bin/mc mb --ignore-existing local/${MINIO_BUCKET};
+      /usr/bin/mc anonymous set public local/${MINIO_BUCKET};
+      exit 0;
+      "
+
+  # Iceberg REST Catalog
+  rest:
+    image: tabulario/iceberg-rest:1.6.0
+    container_name: iceberg-rest
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+    ports:
+      - "8181:8181"
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+      CATALOG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: ${AWS_S3_ENDPOINT}
+      CATALOG_S3_PATH-STYLE-ACCESS: "true"
+      CATALOG_JDBC_URL: jdbc:sqlite:/warehouse/rest_catalog.db
+      CATALOG_JDBC_USER: user
+      CATALOG_JDBC_PASSWORD: password
+    volumes:
+      - shared-warehouse:/warehouse
+
+  # FastAPI Ingestion API
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: iceberg-ingestion-api
+    restart: unless-stopped
+    depends_on:
+      mc:
+        condition: service_completed_successfully
+      rest:
+        condition: service_started
+    ports:
+      - "${API_PORT}:8000"
+    environment:
+      API_HOST: ${API_HOST}
+      API_PORT: ${API_PORT}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+      AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT}
+      AWS_S3_PATH_STYLE_ACCESS: ${AWS_S3_PATH_STYLE_ACCESS}
+      ICEBERG_CATALOG_TYPE: rest
+      ICEBERG_CATALOG_URI: ${ICEBERG_CATALOG_URI}
+      ICEBERG_NAMESPACE: ${ICEBERG_NAMESPACE}
+      ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_REGION: ${MINIO_REGION}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      SAMPLE_DATA_DIR: /app/sample-data
+      TRINO_CATALOG: ${TRINO_CATALOG}
+      TRINO_HOST: trino
+      TRINO_PORT: 8080
+      TRINO_SCHEMA: ${TRINO_SCHEMA}
+    volumes:
+      - ./sample-data:/app/sample-data
+      - shared-warehouse:/warehouse
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Trino SQL Query Engine
+  trino:
+    image: trinodb/trino:438
+    container_name: iceberg-trino
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      rest:
+        condition: service_started
+    ports:
+      - "${TRINO_PORT}:8080"
+    volumes:
+      - shared-warehouse:/warehouse
+    entrypoint: >
+      /bin/sh -c "
+      mkdir -p /etc/trino/catalog &&
+      echo 'connector.name=iceberg' > /etc/trino/catalog/${TRINO_CATALOG}.properties &&
+      echo 'iceberg.catalog.type=rest' >> /etc/trino/catalog/${TRINO_CATALOG}.properties &&
+      echo 'iceberg.rest-catalog.uri=${ICEBERG_CATALOG_URI}' >> /etc/trino/catalog/${TRINO_CATALOG}.properties &&
+      echo 'hive.s3.endpoint=${AWS_S3_ENDPOINT}' >> /etc/trino/catalog/${TRINO_CATALOG}.properties &&
+      echo 'hive.s3.aws-access-key=${AWS_ACCESS_KEY_ID}' >> /etc/trino/catalog/${TRINO_CATALOG}.properties &&
+      echo 'hive.s3.aws-secret-key=${AWS_SECRET_ACCESS_KEY}' >> /etc/trino/catalog/${TRINO_CATALOG}.properties &&
+      echo 'hive.s3.path-style-access=${AWS_S3_PATH_STYLE_ACCESS}' >> /etc/trino/catalog/${TRINO_CATALOG}.properties &&
+      echo 'hive.s3.ssl.enabled=false' >> /etc/trino/catalog/${TRINO_CATALOG}.properties &&
+      echo 'hive.s3.region=${AWS_REGION}' >> /etc/trino/catalog/${TRINO_CATALOG}.properties &&
+      /usr/lib/trino/bin/run-trino
+      "
+
+  # React Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    container_name: iceberg-frontend
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+    ports:
+      - "3001:80"
+
+volumes:
+  minio-data:
+  shared-warehouse:

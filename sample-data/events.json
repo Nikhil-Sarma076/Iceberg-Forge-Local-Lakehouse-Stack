@@ -1,0 +1,47 @@
+[
+  {
+    "event_id": "evt_9901a",
+    "event_name": "page_view",
+    "user_id": "usr_401",
+    "latency_ms": 42.5,
+    "is_authenticated": true,
+    "event_date": "2024-01-20",
+    "timestamp": "2024-01-20T10:14:22Z"
+  },
+  {
+    "event_id": "evt_9902b",
+    "event_name": "add_to_cart",
+    "user_id": "usr_401",
+    "latency_ms": 118.2,
+    "is_authenticated": true,
+    "event_date": "2024-01-20",
+    "timestamp": "2024-01-20T10:15:01Z"
+  },
+  {
+    "event_id": "evt_9903c",
+    "event_name": "search",
+    "user_id": "usr_882",
+    "latency_ms": 65.0,
+    "is_authenticated": false,
+    "event_date": "2024-01-20",
+    "timestamp": "2024-01-20T11:02:45Z"
+  },
+  {
+    "event_id": "evt_9904d",
+    "event_name": "checkout_completed",
+    "user_id": "usr_401",
+    "latency_ms": 340.8,
+    "is_authenticated": true,
+    "event_date": "2024-01-20",
+    "timestamp": "2024-01-20T11:10:30Z"
+  },
+  {
+    "event_id": "evt_9905e",
+    "event_name": "click_banner",
+    "user_id": "usr_109",
+    "latency_ms": 28.1,
+    "is_authenticated": false,
+    "event_date": "2024-01-21",
+    "timestamp": "2024-01-21T09:00:15Z"
+  }
+]
